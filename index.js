@@ -45,13 +45,20 @@ async function run() {
       const user = req.body;
       const result = await userCollection.insertOne(user);
       res.send(result);
-      console.log(result);
     });
     app.post("/teacher/apply", async (req, res) => {
       const user = req.body;
-      const result = await teacherApplyCollection.insertOne(user);
-      res.send(result);
-      console.log(result);
+
+      const query = { teacherEmail: user.teacherEmail };
+
+      const exist = await teacherApplyCollection.findOne(query);
+
+      if (exist) {
+        res.send({ message: "Already Applied" });
+      } else {
+        const result = await teacherApplyCollection.insertOne(user);
+        res.send(result);
+      }
     });
 
     // Send a ping to confirm a successful connection
