@@ -36,9 +36,22 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
-    app.post("/user/add", (req, res) => {
+    const userCollection = client.db("blazeEdu").collection("users");
+    const teacherApplyCollection = client
+      .db("blazeEdu")
+      .collection("teacherApply");
+
+    app.post("/user/add", async (req, res) => {
       const user = req.body;
-      console.log(user);
+      const result = await userCollection.insertOne(user);
+      res.send(result);
+      console.log(result);
+    });
+    app.post("/teacher/apply", async (req, res) => {
+      const user = req.body;
+      const result = await teacherApplyCollection.insertOne(user);
+      res.send(result);
+      console.log(result);
     });
 
     // Send a ping to confirm a successful connection
