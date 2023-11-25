@@ -60,6 +60,36 @@ async function run() {
         res.send(result);
       }
     });
+    // get the user with params for checking who the hell is user is
+    app.get("/user/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { email: id };
+        const result = await userCollection.findOne(query);
+        res.send(result);
+      } catch (err) {
+        console.log(err);
+      }
+    });
+    // get all user for admin
+    app.get("/users", async (req, res) => {
+      try {
+        const data = await userCollection.find();
+        const result = await data.toArray();
+        res.send(result);
+      } catch (err) {
+        console.log(err);
+      }
+    });
+    app.get("/teacher/request", async (req, res) => {
+      try {
+        const data = await teacherApplyCollection.find();
+        const result = await data.toArray();
+        res.send(result);
+      } catch (err) {
+        console.log(err);
+      }
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
