@@ -57,7 +57,7 @@ async function run() {
         res.send({ message: "Already Applied" });
       } else {
         const result = await teacherApplyCollection.insertOne(user);
-        res.send(result);
+        res.send([result, { message: "Apply Success" }]);
       }
     });
     // get the user with params for checking who the hell is user is
@@ -81,6 +81,7 @@ async function run() {
         console.log(err);
       }
     });
+    // teacher request
     app.get("/teacher/request", async (req, res) => {
       try {
         const data = await teacherApplyCollection.find();
@@ -88,6 +89,47 @@ async function run() {
         res.send(result);
       } catch (err) {
         console.log(err);
+      }
+    });
+
+    // teacher approve
+    app.put("/teacher/accept/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { email: id };
+      const options = { upsert: true };
+      const update = req.body;
+      const statusFilter = { teacherEmail: id };
+
+      const accept = {
+        $set: {
+          role: "teacher",
+        },
+      };
+      const statusSet = {
+        $set: {
+          status: "approve",
+        },
+      };
+
+      const status = await teacherApplyCollection.updateOne(
+        statusFilter,
+        statusSet
+      );
+
+      const result = await userCollection.updateOne(filter, accept, options);
+
+      res.send(result);
+    });
+    // api for  apply collection data when admin aprove teacher
+    app.put("/teacher/request/clear/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { email: id };
+        const result = await teacherApplyCollection.deleteOne(query);
+        res.send(result);
+      } catch (err) {
+        console.log(err);
+        res.send(err);
       }
     });
 
