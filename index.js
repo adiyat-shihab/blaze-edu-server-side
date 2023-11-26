@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const { ObjectId } = require("mongodb");
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -93,11 +94,24 @@ async function run() {
       }
     });
 
-    // teacher approve
+    // Make Admin
+    app.put("/admin/make/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { email: id };
+
+      const accept = {
+        $set: {
+          role: "admin",
+        },
+      };
+
+      const result = await userCollection.updateOne(filter, accept);
+
+      res.send(result);
+    });
     app.put("/teacher/accept/:id", async (req, res) => {
       const id = req.params.id;
       const filter = { email: id };
-      const options = { upsert: true };
       const update = req.body;
       const statusFilter = { teacherEmail: id };
 
@@ -108,7 +122,7 @@ async function run() {
       };
       const statusSet = {
         $set: {
-          status: "approve",
+          status: update.status,
         },
       };
 
@@ -116,29 +130,58 @@ async function run() {
         statusFilter,
         statusSet
       );
-
-      const result = await userCollection.updateOne(filter, accept, options);
-
-      res.send(result);
-    });
-    // api for  apply collection data when admin aprove teacher
-    app.put("/teacher/request/clear/:id", async (req, res) => {
-      try {
-        const id = req.params.id;
-        const query = { email: id };
-        const result = await teacherApplyCollection.deleteOne(query);
-        res.send(result);
-      } catch (err) {
-        console.log(err);
-        res.send(err);
+      if (update.status !== "reject") {
+        const result = await userCollection.updateOne(filter, accept);
+        console.log(update.status);
       }
+
+      res.send(status);
     });
 
+    // post class through teacher
     app.post("/class/add", async (req, res) => {
       const data = req.body;
       ("");
       const result = await classCollection.insertOne(data);
 
+      res.send(result);
+    });
+    // get class with params for checking who the teacher is
+
+    app.get("/class/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { email: id };
+        const data = await classCollection.find(query);
+        const result = await data.toArray();
+        res.send(result);
+      } catch (err) {
+        console.log(err);
+      }
+    });
+    app.get("/admin/all/class", async (req, res) => {
+      try {
+        const filter = { status: { $in: ["pending", "approve"] } };
+        const data = await classCollection.find(filter);
+        const result = await data.toArray();
+        res.send(result);
+      } catch (err) {
+        console.log(err);
+      }
+    });
+    // admin class approve
+    app.put("/admin/approve/:id", async (req, res) => {
+      const id = req.params.id;
+      console.log(id);
+      const filter = { _id: new ObjectId(id) };
+      const updateStatus = req.body;
+      console.log(updateStatus);
+      const statusSet = {
+        $set: {
+          status: updateStatus.status,
+        },
+      };
+      const result = await classCollection.updateOne(filter, statusSet);
       res.send(result);
     });
 
