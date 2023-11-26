@@ -37,6 +37,7 @@ async function run() {
     await client.connect();
 
     const userCollection = client.db("blazeEdu").collection("users");
+    const classCollection = client.db("blazeEdu").collection("class");
     const teacherApplyCollection = client
       .db("blazeEdu")
       .collection("teacherApply");
@@ -131,6 +132,14 @@ async function run() {
         console.log(err);
         res.send(err);
       }
+    });
+
+    app.post("/class/add", async (req, res) => {
+      const data = req.body;
+      ("");
+      const result = await classCollection.insertOne(data);
+
+      res.send(result);
     });
 
     // Send a ping to confirm a successful connection
