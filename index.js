@@ -146,13 +146,24 @@ async function run() {
 
       res.send(result);
     });
-    // get class with params for checking who the teacher is
+    // get class with params for checking the specific teacher
 
     app.get("/class/:id", async (req, res) => {
       try {
         const id = req.params.id;
         const query = { email: id };
         const data = await classCollection.find(query);
+        const result = await data.toArray();
+        res.send(result);
+      } catch (err) {
+        console.log(err);
+      }
+    });
+    // get the filter approve classes
+    app.get("/class/filter/approve", async (req, res) => {
+      try {
+        const filter = { status: "approve" };
+        const data = await classCollection.find(filter);
         const result = await data.toArray();
         res.send(result);
       } catch (err) {
