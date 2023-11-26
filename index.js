@@ -159,6 +159,34 @@ async function run() {
         console.log(err);
       }
     });
+
+    // modify single class
+    app.put("/class/modify/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const data = req.body;
+      const update = {
+        $set: {
+          title: data.title,
+          description: data.description,
+          price: data.price,
+          photo: data.photo,
+        },
+      };
+
+      const result = await classCollection.updateOne(filter, update);
+
+      res.send(result);
+    });
+
+    // api for delete class
+    app.delete("/class/delete/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const result = await classCollection.deleteOne(filter);
+      res.send(result);
+    });
+
     app.get("/admin/all/class", async (req, res) => {
       try {
         const filter = { status: { $in: ["pending", "approve"] } };
@@ -172,10 +200,10 @@ async function run() {
     // admin class approve
     app.put("/admin/approve/:id", async (req, res) => {
       const id = req.params.id;
-      console.log(id);
+
       const filter = { _id: new ObjectId(id) };
       const updateStatus = req.body;
-      console.log(updateStatus);
+
       const statusSet = {
         $set: {
           status: updateStatus.status,
