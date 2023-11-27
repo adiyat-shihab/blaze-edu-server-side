@@ -1,5 +1,7 @@
 const express = require("express");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const { ObjectId } = require("mongodb");
 
 const app = express();
@@ -23,7 +25,6 @@ console.log(process.env.API_NAME);
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const uri = `mongodb+srv://${process.env.API_NAME}:${process.env.API_PASSWORD}@cluster0.qmj3ajj.mongodb.net/?retryWrites=true&w=majority`;
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -34,14 +35,54 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
     const userCollection = client.db("blazeEdu").collection("users");
     const classCollection = client.db("blazeEdu").collection("class");
+    const paymentCollection = client.db("blazeEdu").collection("payments");
+    const teacherAssignmentCollection = client
+      .db("blazeEdu")
+      .collection("assignments");
+    const studentEnrollmentCollection = client
+      .db("blazeEdu")
+      .collection("studentEnrolment");
     const teacherApplyCollection = client
       .db("blazeEdu")
       .collection("teacherApply");
+
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: "1h",
+      });
+      res.send({ token });
+    });
+
+    const verifyToken = (req, res, next) => {
+      if (!req.headers.authorization) {
+        return res.status(401).send({ message: "unauthorized access" });
+      }
+      const token = req.headers.authorization.split(" ")[1];
+
+      jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+        if (err) {
+          return res.status(401).send({ message: "unauthorized access" });
+        }
+        req.decoded = decoded;
+        next();
+      });
+    };
+
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const isAdmin = user?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
 
     app.post("/user/add", async (req, res) => {
       const user = req.body;
@@ -74,7 +115,7 @@ async function run() {
       }
     });
     // get all user for admin
-    app.get("/users", async (req, res) => {
+    app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const data = await userCollection.find();
         const result = await data.toArray();
@@ -84,7 +125,7 @@ async function run() {
       }
     });
     // teacher request
-    app.get("/teacher/request", async (req, res) => {
+    app.get("/teacher/request", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const data = await teacherApplyCollection.find();
         const result = await data.toArray();
@@ -221,6 +262,78 @@ async function run() {
         },
       };
       const result = await classCollection.updateOne(filter, statusSet);
+      res.send(result);
+    });
+
+    // get a single class for student
+    app.get("/student/class/single/:id", verifyToken, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await classCollection.findOne(query);
+        res.send(result);
+      } catch (err) {
+        console.log(err);
+      }
+    });
+
+    app.post("/student/enrollment", verifyToken, async (req, res) => {
+      const data = req.body;
+      const filter = {
+        class_id: data.class_id,
+        student_email: data.student_email,
+      };
+
+      const exist = await studentEnrollmentCollection.findOne(filter);
+
+      if (exist) {
+        res.send({ message: "Already Enrolled" });
+      } else {
+        const result = await studentEnrollmentCollection.insertOne(data);
+        const count = {
+          class_id: data.class_id,
+        };
+
+        const enrollCount = await studentEnrollmentCollection.countDocuments(
+          count
+        );
+        const id = {
+          _id: new ObjectId(data.class_id),
+        };
+        const setDecument = await classCollection.updateOne(id, {
+          $set: {
+            enrollCount: enrollCount,
+          },
+        });
+        res.send(result);
+      }
+    });
+    app.get("/student/enrollment/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = { student_email: email };
+      const data = await studentEnrollmentCollection.find(query);
+      const result = await data.toArray();
+      res.send(result);
+    });
+
+    app.get(
+      "/teacher/single/class/details/:id",
+      verifyToken,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const query = { _id: new ObjectId(id), status: "approve" };
+          const result = await classCollection.findOne(query);
+          res.send(result);
+        } catch (err) {
+          console.log(err);
+        }
+      }
+    );
+
+    app.post("/teacher/assignment", verifyToken, async (req, res) => {
+      const data = req.body;
+      const result = await teacherAssignmentCollection.insertOne(data);
       res.send(result);
     });
 
