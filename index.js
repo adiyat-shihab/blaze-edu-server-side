@@ -362,6 +362,26 @@ async function run() {
         res.send(result);
       }
     });
+    app.get("/teacher/assignment/result/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const filter = { class_id: id };
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+
+      const filterStudent = {
+        submission_date: {
+          $gte: today.toLocaleDateString("en-US"),
+          $lt: tomorrow.toLocaleDateString("en-US"),
+        },
+      };
+      const studentAssignment =
+        await studentAssignmentCollection.countDocuments(filterStudent);
+      const totalAssignment = await teacherAssignmentCollection.find(filter);
+      const result = await totalAssignment.toArray();
+      res.send({ studentAssignment, result });
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
