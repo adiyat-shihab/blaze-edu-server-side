@@ -40,6 +40,9 @@ async function run() {
     const userCollection = client.db("blazeEdu").collection("users");
     const classCollection = client.db("blazeEdu").collection("class");
     const paymentCollection = client.db("blazeEdu").collection("payments");
+    const studentAssignmentCollection = client
+      .db("blazeEdu")
+      .collection("studentAssignment");
     const teacherAssignmentCollection = client
       .db("blazeEdu")
       .collection("assignments");
@@ -335,6 +338,29 @@ async function run() {
       const data = req.body;
       const result = await teacherAssignmentCollection.insertOne(data);
       res.send(result);
+    });
+    app.get("/student/assignment/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const query = { class_id: id };
+      const data = await teacherAssignmentCollection.find(query);
+      const result = await data.toArray();
+      res.send(result);
+    });
+
+    app.post("/student/assignment/submit", verifyToken, async (req, res) => {
+      const data = req.body;
+      const filter = {
+        class_id: data.class_id,
+        student_email: data.student_email,
+        assignment_id: data.assignment_id,
+      };
+      const isExist = await studentAssignmentCollection.findOne(filter);
+      if (isExist) {
+        res.send({ message: "Already Submit" });
+      } else {
+        const result = await studentAssignmentCollection.insertOne(data);
+        res.send(result);
+      }
     });
 
     // Send a ping to confirm a successful connection
