@@ -37,6 +37,9 @@ async function run() {
   try {
     await client.connect();
 
+    const studentFeedbackCollection = client
+      .db("blazeEdu")
+      .collection("studentFeedback");
     const userCollection = client.db("blazeEdu").collection("users");
     const classCollection = client.db("blazeEdu").collection("class");
     const paymentCollection = client.db("blazeEdu").collection("payments");
@@ -138,6 +141,24 @@ async function run() {
       }
     });
 
+    app.get("/teacher/request/:id", verifyToken, async (req, res) => {
+      const email = req.params.id;
+      const filter = { teacherEmail: email };
+      const result = await teacherApplyCollection.findOne(filter);
+      res.send(result);
+    });
+    app.put("/teacher/another/request/:id", verifyToken, async (req, res) => {
+      const email = req.params.id;
+      const filter = { teacherEmail: email };
+      const update = {
+        $set: {
+          status: "pending",
+        },
+      };
+      const result = await teacherApplyCollection.updateOne(filter, update);
+      res.send(result);
+    });
+
     // Make Admin
     app.put("/admin/make/:id", async (req, res) => {
       const id = req.params.id;
@@ -235,16 +256,28 @@ async function run() {
     });
 
     // api for delete class
-    app.delete("/class/delete/:id", async (req, res) => {
+    app.delete("/class/delete/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
+      const classFilter = { class_id: id };
+
+      const studentEnrollDelete = await studentEnrollmentCollection.deleteMany(
+        classFilter
+      );
+      const studentAssignmentDelete =
+        await studentAssignmentCollection.deleteMany(classFilter);
+      const studentFeedbackDelete =
+        studentFeedbackCollection.deleteMany(classFilter);
+      const assignmentDelete = await teacherAssignmentCollection.deleteMany(
+        classFilter
+      );
       const result = await classCollection.deleteOne(filter);
       res.send(result);
     });
 
     app.get("/admin/all/class", async (req, res) => {
       try {
-        const filter = { status: { $in: ["pending", "approve"] } };
+        const filter = { status: { $in: ["pending", "approve", "reject"] } };
         const data = await classCollection.find(filter);
         const result = await data.toArray();
         res.send(result);
@@ -300,12 +333,14 @@ async function run() {
         const enrollCount = await studentEnrollmentCollection.countDocuments(
           count
         );
+        const enrollCountString = enrollCount.toString();
+
         const id = {
           _id: new ObjectId(data.class_id),
         };
         const setDecument = await classCollection.updateOne(id, {
           $set: {
-            enrollCount: enrollCount,
+            enrollCount: enrollCountString,
           },
         });
         res.send(result);
@@ -364,6 +399,7 @@ async function run() {
     });
     app.get("/teacher/assignment/result/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
+      console.log(id);
       const filter = { class_id: id };
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -381,6 +417,52 @@ async function run() {
       const totalAssignment = await teacherAssignmentCollection.find(filter);
       const result = await totalAssignment.toArray();
       res.send({ studentAssignment, result });
+    });
+
+    app.post("/student/feedback", verifyToken, async (req, res) => {
+      const data = req.body;
+      const filter = {
+        class_id: data.class_id,
+        student_email: data.student_email,
+      };
+      const isExist = await studentFeedbackCollection.findOne(filter);
+      if (isExist) {
+        res.send({ message: "Already Send Feedback" });
+      } else {
+        const result = await studentFeedbackCollection.insertOne(data);
+        res.send(result);
+      }
+    });
+    app.get(
+      "/get/student/feedback/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const query = { class_id: id };
+        const data = await studentFeedbackCollection.find(query);
+        const result = await data.toArray();
+        res.send(result);
+      }
+    );
+
+    app.get("/get/sort/enrollment", async (req, res) => {
+      try {
+        const result = await classCollection
+          .aggregate([
+            {
+              $sort: { enrollCount: -1 }, // Explicitly convert to integer during sort
+            },
+            {
+              $limit: 6,
+            },
+          ])
+          .toArray();
+
+        res.send(result);
+      } catch (err) {
+        console.log(err);
+      }
     });
 
     // Send a ping to confirm a successful connection
