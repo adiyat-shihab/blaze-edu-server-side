@@ -92,8 +92,14 @@ async function run() {
 
     app.post("/user/add", async (req, res) => {
       const user = req.body;
-      const result = await userCollection.insertOne(user);
-      res.send(result);
+      const find = { email: user.email };
+      const isExist = await userCollection.findOne(find);
+      if (isExist) {
+        res.send({ message: "already exist" });
+      } else {
+        const result = await userCollection.insertOne(user);
+        res.send(result);
+      }
     });
     app.post("/teacher/apply", async (req, res) => {
       const user = req.body;
@@ -160,7 +166,7 @@ async function run() {
     });
 
     // Make Admin
-    app.put("/admin/make/:id", async (req, res) => {
+    app.put("/admin/make/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const filter = { email: id };
 
@@ -174,37 +180,42 @@ async function run() {
 
       res.send(result);
     });
-    app.put("/teacher/accept/:id", async (req, res) => {
-      const id = req.params.id;
-      const filter = { email: id };
-      const update = req.body;
-      const statusFilter = { teacherEmail: id };
+    app.put(
+      "/teacher/accept/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { email: id };
+        const update = req.body;
+        const statusFilter = { teacherEmail: id };
 
-      const accept = {
-        $set: {
-          role: "teacher",
-        },
-      };
-      const statusSet = {
-        $set: {
-          status: update.status,
-        },
-      };
+        const accept = {
+          $set: {
+            role: "teacher",
+          },
+        };
+        const statusSet = {
+          $set: {
+            status: update.status,
+          },
+        };
 
-      const status = await teacherApplyCollection.updateOne(
-        statusFilter,
-        statusSet
-      );
-      if (update.status !== "reject") {
-        const result = await userCollection.updateOne(filter, accept);
-        console.log(update.status);
+        const status = await teacherApplyCollection.updateOne(
+          statusFilter,
+          statusSet
+        );
+        if (update.status !== "reject") {
+          const result = await userCollection.updateOne(filter, accept);
+          console.log(update.status);
+        }
+
+        res.send(status);
       }
-
-      res.send(status);
-    });
+    );
 
     // post class through teacher
-    app.post("/class/add", async (req, res) => {
+    app.post("/class/add", verifyToken, async (req, res) => {
       const data = req.body;
       ("");
       const result = await classCollection.insertOne(data);
@@ -213,7 +224,7 @@ async function run() {
     });
     // get class with params for checking the specific teacher
 
-    app.get("/class/:id", async (req, res) => {
+    app.get("/class/:id", verifyToken, async (req, res) => {
       try {
         const id = req.params.id;
         const query = { email: id };
@@ -237,7 +248,7 @@ async function run() {
     });
 
     // modify single class
-    app.put("/class/modify/:id", async (req, res) => {
+    app.put("/class/modify/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
       const data = req.body;
@@ -275,7 +286,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/admin/all/class", async (req, res) => {
+    app.get("/admin/all/class", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const filter = { status: { $in: ["pending", "approve", "reject"] } };
         const data = await classCollection.find(filter);
@@ -286,20 +297,25 @@ async function run() {
       }
     });
     // admin class approve
-    app.put("/admin/approve/:id", async (req, res) => {
-      const id = req.params.id;
+    app.put(
+      "/admin/approve/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
 
-      const filter = { _id: new ObjectId(id) };
-      const updateStatus = req.body;
+        const filter = { _id: new ObjectId(id) };
+        const updateStatus = req.body;
 
-      const statusSet = {
-        $set: {
-          status: updateStatus.status,
-        },
-      };
-      const result = await classCollection.updateOne(filter, statusSet);
-      res.send(result);
-    });
+        const statusSet = {
+          $set: {
+            status: updateStatus.status,
+          },
+        };
+        const result = await classCollection.updateOne(filter, statusSet);
+        res.send(result);
+      }
+    );
 
     // get a single class for student
     app.get("/student/class/single/:id", verifyToken, async (req, res) => {
@@ -448,10 +464,16 @@ async function run() {
 
     app.get("/get/sort/enrollment", async (req, res) => {
       try {
+        const filter = {
+          status: "approve",
+        };
         const result = await classCollection
           .aggregate([
             {
-              $sort: { enrollCount: -1 }, // Explicitly convert to integer during sort
+              $match: filter,
+            },
+            {
+              $sort: { enrollCount: -1 },
             },
             {
               $limit: 6,
@@ -464,6 +486,65 @@ async function run() {
         console.log(err);
       }
     });
+
+    app.get("/get/public/feedback", async (req, res) => {
+      const result = await studentFeedbackCollection
+        .aggregate([
+          {
+            $limit: 3,
+          },
+        ])
+        .toArray();
+      res.send(result);
+    });
+
+    app.get("/get/class/search", async (req, res) => {
+      try {
+        const searchQuery = req.query.query;
+
+        const query = {
+          $or: [
+            { title: { $regex: searchQuery, $options: "i" } },
+            { name: { $regex: searchQuery, $options: "i" } },
+          ],
+          status: "approve",
+        };
+
+        const cursor = classCollection.find(query);
+        const result = await cursor.toArray();
+        res.send(result);
+      } catch (err) {
+        console.log(err);
+        res
+          .status(500)
+          .send({ error: "An error occurred while searching class" });
+      }
+    });
+
+    app.get(
+      "/admin/search/user",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const searchQuery = req.query.query;
+          const query = {
+            $or: [
+              { name: { $regex: searchQuery, $options: "i" } },
+              { email: { $regex: searchQuery, $options: "i" } },
+            ],
+          };
+          const cursor = userCollection.find(query);
+          const result = await cursor.toArray();
+          res.send(result);
+        } catch (err) {
+          console.log(err);
+          res
+            .status(500)
+            .send({ error: "An error occurred while searching user" });
+        }
+      }
+    );
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
