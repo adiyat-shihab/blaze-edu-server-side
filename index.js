@@ -7,8 +7,13 @@ const { ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 3000;
 require("dotenv").config();
+const corsOption = {
+  origin: "*",
+  credentials: true,
+  optionSuccessStatus: 200,
+};
 
-app.use(cors());
+app.use(cors(corsOption));
 
 app.use(express.json());
 
@@ -20,8 +25,6 @@ app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
 });
 
-console.log(process.env.API_NAME);
-
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const uri = `mongodb+srv://${process.env.API_NAME}:${process.env.API_PASSWORD}@cluster0.qmj3ajj.mongodb.net/?retryWrites=true&w=majority`;
 
@@ -32,10 +35,35 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+const verifyToken = (req, res, next) => {
+  if (!req.headers.authorization) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+  const token = req.headers.authorization.split(" ")[1];
+
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(401).send({ message: "unauthorized access" });
+    }
+    req.decoded = decoded;
+    next();
+  });
+};
+
+const verifyAdmin = async (req, res, next) => {
+  const email = req.decoded.email;
+  const query = { email: email };
+  const user = await userCollection.findOne(query);
+  const isAdmin = user?.role === "admin";
+  if (!isAdmin) {
+    return res.status(403).send({ message: "forbidden access" });
+  }
+  next();
+};
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     const studentFeedbackCollection = client
       .db("blazeEdu")
@@ -63,32 +91,6 @@ async function run() {
       });
       res.send({ token });
     });
-
-    const verifyToken = (req, res, next) => {
-      if (!req.headers.authorization) {
-        return res.status(401).send({ message: "unauthorized access" });
-      }
-      const token = req.headers.authorization.split(" ")[1];
-
-      jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
-        if (err) {
-          return res.status(401).send({ message: "unauthorized access" });
-        }
-        req.decoded = decoded;
-        next();
-      });
-    };
-
-    const verifyAdmin = async (req, res, next) => {
-      const email = req.decoded.email;
-      const query = { email: email };
-      const user = await userCollection.findOne(query);
-      const isAdmin = user?.role === "admin";
-      if (!isAdmin) {
-        return res.status(403).send({ message: "forbidden access" });
-      }
-      next();
-    };
 
     app.post("/user/add", async (req, res) => {
       const user = req.body;
@@ -545,12 +547,20 @@ async function run() {
         }
       }
     );
+    app.get("/public/statistic", async (req, res) => {
+      const totalUser = await userCollection.countDocuments();
+      const totalEnrollment =
+        await studentEnrollmentCollection.countDocuments();
+      const totalClass = await classCollection.countDocuments();
+      const result = { totalUser, totalEnrollment, totalClass };
+      res.send(result);
+    });
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
