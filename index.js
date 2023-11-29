@@ -2,18 +2,12 @@ const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-const { ObjectId } = require("mongodb");
-
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 3000;
 require("dotenv").config();
-const corsOption = {
-  origin: "*",
-  credentials: true,
-  optionSuccessStatus: 200,
-};
 
-app.use(cors(corsOption));
+app.use(cors());
 
 app.use(express.json());
 
@@ -25,8 +19,9 @@ app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
 });
 
-const { MongoClient, ServerApiVersion } = require("mongodb");
 const uri = `mongodb+srv://${process.env.API_NAME}:${process.env.API_PASSWORD}@cluster0.qmj3ajj.mongodb.net/?retryWrites=true&w=majority`;
+
+// const uri = `mongodb+srv://${process.env.API_NAME}:${process.env.API_PASSWORD}@cluster0.hzlter2.mongodb.net/?retryWrites=true&w=majority`;
 
 const client = new MongoClient(uri, {
   serverApi: {
@@ -48,17 +43,6 @@ const verifyToken = (req, res, next) => {
     req.decoded = decoded;
     next();
   });
-};
-
-const verifyAdmin = async (req, res, next) => {
-  const email = req.decoded.email;
-  const query = { email: email };
-  const user = await userCollection.findOne(query);
-  const isAdmin = user?.role === "admin";
-  if (!isAdmin) {
-    return res.status(403).send({ message: "forbidden access" });
-  }
-  next();
 };
 
 async function run() {
@@ -83,6 +67,17 @@ async function run() {
     const teacherApplyCollection = client
       .db("blazeEdu")
       .collection("teacherApply");
+
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const isAdmin = user?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
 
     app.post("/jwt", async (req, res) => {
       const user = req.body;
@@ -139,7 +134,7 @@ async function run() {
       }
     });
     // teacher request
-    app.get("/teacher/request", verifyToken, verifyAdmin, async (req, res) => {
+    app.get("/teacher/request", verifyToken, async (req, res) => {
       try {
         const data = await teacherApplyCollection.find();
         const result = await data.toArray();
